@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Myanmar Earthquake Events & GEM Active Faults Map (18 Oct 2026)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      background: #111827;
+      color: #f3f4f6;
+    }
+    #sidebar {
+      width: 370px;
+      background: #1f2937;
+      border-right: 1px solid #374151;
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+      overflow-y: auto;
+    }
+    .header {
+      padding: 16px;
+      background: #1e3a8a;
+      border-bottom: 1px solid #3b82f6;
+    }
+    .header h1 { font-size: 1.05rem; font-weight: 700; color: #fff; }
+    .header p { font-size: 0.78rem; color: #bfdbfe; margin-top: 4px; }
+    .section {
+      padding: 14px 16px;
+      border-bottom: 1px solid #374151;
+    }
+    .section h2 {
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #9ca3af;
+      margin-bottom: 10px;
+    }
+    .quake-card {
+      background: #111827;
+      border: 1px solid #374151;
+      border-left: 4px solid #ef4444;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .quake-card:hover {
+      transform: translateY(-1px);
+      border-color: #f87171;
+    }
+    .quake-card.m35 { border-left-color: #f59e0b; }
+    .quake-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+    }
+    .mag-badge {
+      background: #ef4444;
+      color: #fff;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .mag-badge.m35 { background: #d97706; }
+    .quake-meta {
+      font-size: 0.78rem;
+      color: #d1d5db;
+      line-height: 1.45;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 9px 12px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 0.83rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: background 0.15s;
+      text-decoration: none;
+    }
+    .btn:hover:not(:disabled) { background: #1d4ed8; }
+    .btn:disabled { background: #4b5563; cursor: not-allowed; }
+    .btn.secondary { background: #374151; margin-top: 8px; }
+    .btn.secondary:hover { background: #4b5563; }
+    .status-box {
+      font-size: 0.78rem;
+      padding: 8px 10px;
+      border-radius: 5px;
+      background: #111827;
+      border: 1px solid #374151;
+      color: #93c5fd;
+      margin-bottom: 8px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      font-size: 0.8rem;
+      margin-bottom: 6px;
+      color: #e5e7eb;
+    }
+    .legend-line {
+      width: 24px;
+      height: 3px;
+      margin-right: 10px;
+      border-radius: 2px;
+    }
+    #map {
+      flex: 1;
+      height: 100vh;
+      background: #111827;
+    }
+
+    /* Key-free Dark Basemap (OSM) filter applied only to the OSM dark tile layer */
+    .osm-dark-tiles {
+      filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+    }
+
+    /* Pulsing Epicenter Marker */
+    .epicenter-icon {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .epicenter-core {
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 0 8px rgba(0,0,0,0.6);
+      z-index: 2;
+    }
+    .epicenter-pulse {
+      position: absolute;
+      border-radius: 50%;
+      animation: pulse 2s infinite ease-out;
+      z-index: 1;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.6); opacity: 0.9; }
+      100% { transform: scale(2.6); opacity: 0; }
+    }
+
+    /* Popup & Layers Control Styling */
+    .leaflet-popup-content-wrapper {
+      background: #1f2937;
+      color: #f3f4f6;
+      border: 1px solid #4b5563;
+      border-radius: 8px;
+    }
+    .leaflet-popup-tip { background: #1f2937; }
+    .popup-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-size: 0.8rem;
+    }
+    .popup-table td {
+      padding: 3px 6px;
+      border-bottom: 1px solid #374151;
+    }
+    .popup-table td:first-child {
+      font-weight: 600;
+      color: #9ca3af;
+      width: 40%;
+    }
+    .leaflet-control-layers {
+      background: #1f2937;
+      color: #f3f4f6;
+      border: 1px solid #4b5563;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .leaflet-control-layers-toggle {
+      cursor: pointer;
+    }
+    .leaflet-control-layers-expanded {
+      padding: 10px 14px;
+    }
+    .leaflet-control-layers-separator {
+      border-top-color: #374151;
+    }
+  </style>
+</head>
+<body>
+
+  <aside id="sidebar">
+    <div class="header">
+      <h1>Myanmar Seismic & Active Faults</h1>
+      <p>DMH Quake Bulletins (18.10.2026) + GEM Faults DB</p>
+    </div>
+
+    <div class="section">
+      <h2>Earthquake Events (18.10.2026)</h2>
+
+      <div class="quake-card" onclick="focusQuake(0)">
+        <div class="quake-title">
+          <span>W-NW of Mongkhet</span>
+          <span class="mag-badge">4.4 M</span>
+        </div>
+        <div class="quake-meta">
+          <strong>Time (MST):</strong> 03:38:26<br/>
+          <strong>Coords:</strong> 21.78° N, 99.06° E<br/>
+          <strong>Depth:</strong> 10 km (Slight)<br/>
+          <strong>Region:</strong> About 26 miles W-NW of Mongkhet.
+        </div>
+      </div>
+
+      <div class="quake-card m35" onclick="focusQuake(1)">
+        <div class="quake-title">
+          <span>SW of Panghsang</span>
+          <span class="mag-badge m35">3.5 M</span>
+        </div>
+        <div class="quake-meta">
+          <strong>Time (MST):</strong> 03:55:10<br/>
+          <strong>Coords:</strong> 22.11° N, 99.10° E<br/>
+          <strong>Depth:</strong> 10 km (Slight)<br/>
+          <strong>Region:</strong> About 6 miles SW of Panghsang.
+        </div>
+      </div>
+
+      <button class="btn secondary" onclick="resetView()">Zoom to Epicenters</button>
+      <button class="btn secondary" onclick="zoomMyanmar()">Zoom to All Myanmar Faults</button>
+    </div>
+
+    <div class="section">
+      <h2>GEM Active Faults Dataset</h2>
+      <div id="status" class="status-box">
+        Fetching GEM Global Active Faults from GitHub...
+      </div>
+      <button id="downloadBtn" class="btn" disabled onclick="downloadMyanmarGeoJSON()">
+        Download myanmar_active_faults.geojson
+      </button>
+      <button id="downloadCombinedBtn" class="btn secondary" disabled onclick="downloadCombinedGeoJSON()">
+        Download Combined (Faults + Quakes) GeoJSON
+      </button>
+
+      <div style="margin-top: 12px;">
+        <label style="font-size: 0.75rem; color: #9ca3af; display: block; margin-bottom: 4px;">
+          Or load local <code>.geojson</code> file:
+        </label>
+        <input type="file" id="fileInput" accept=".geojson,.json" style="font-size: 0.75rem; width: 100%;" />
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Fault Slip Type Legend</h2>
+      <div class="legend-item"><span class="legend-line" style="background:#ef4444;"></span> Strike-Slip (Dextral / Sinistral)</div>
+      <div class="legend-item"><span class="legend-line" style="background:#a855f7;"></span> Thrust / Reverse / Subduction</div>
+      <div class="legend-item"><span class="legend-line" style="background:#3b82f6;"></span> Normal / Oblique Normal</div>
+      <div class="legend-item"><span class="legend-line" style="background:#10b981;"></span> Other / Unspecified Active Fault</div>
+    </div>
+  </aside>
+
+  <main id="map"></main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // 1. Extracted Earthquake Data (Valid GeoJSON FeatureCollection)
+    const earthquakeGeoJSON = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {
+            id: "DMH-20261018-033826",
+            date: "18.10.2026",
+            time_mst: "03:38:26",
+            magnitude: 4.4,
+            magnitude_label: "4.4 M (Slight)",
+            latitude: "21.78 N",
+            longitude: "99.06 E",
+            depth_km: 10,
+            region: "About 26 miles W-NW of Mongkhet.",
+            agency: "Department of Meteorology and Hydrology (DMH), Nay Pyi Taw",
+            url: "https://www.moezala.gov.mm/"
+          },
+          geometry: {
+            type: "Point",
+            coordinates: [99.06, 21.78, -10.0]
+          }
+        },
+        {
+          type: "Feature",
+          properties: {
+            id: "DMH-20261018-035510",
+            date: "18.10.2026",
+            time_mst: "03:55:10",
+            magnitude: 3.5,
+            magnitude_label: "3.5 M (Slight)",
+            latitude: "22.11 N",
+            longitude: "99.10 E",
+            depth_km: 10,
+            region: "About 6 miles SW of Panghsang.",
+            agency: "Department of Meteorology and Hydrology (DMH), Nay Pyi Taw",
+            url: "https://www.moezala.gov.mm/"
+          },
+          geometry: {
+            type: "Point",
+            coordinates: [99.10, 22.11, -10.0]
+          }
+        }
+      ]
+    };
+
+    // 2. Define the 4 Requested Basemaps (100% Free & No API Key Required)
+    // Dark Basemap (OSM): Uses official OpenStreetMap tiles with a dark-mode CSS class (Default)
+    const darkBasemapOSM = L.tileLayer(
+      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        className: "osm-dark-tiles",
+        maxZoom: 19,
+        attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+      }
+    );
+
+    // Satellite Imagery (Esri): High-resolution satellite and aerial photography provided by Esri
+    const esriSatellite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {
+        attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+      }
+    );
+
+    // Topographic (Esri): Topographic reference layer featuring contour lines, elevation, and landforms
+    const esriTopographic = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+      {
+        attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community"
+      }
+    );
+
+    // Terrain (OpenTopoMap): Community-driven topographic map styled after official federal topographic maps
+    const openTopoMap = L.tileLayer(
+      "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+      {
+        maxZoom: 17,
+        attribution: "Map data: &copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors, <a href='http://viewfinderpanoramas.org'>SRTM</a> | Map style: &copy; <a href='https://opentopomap.org'>OpenTopoMap</a> (<a href='https://creativecommons.org/licenses/by-sa/3.0/'>CC-BY-SA</a>)"
+      }
+    );
+
+    // Initialize Map with Dark Basemap (OSM) selected by default
+    const map = L.map("map", {
+      center: [21.95, 99.08],
+      zoom: 9,
+      layers: [darkBasemapOSM]
+    });
+
+    const faultsLayerGroup = L.layerGroup().addTo(map);
+    const quakesLayerGroup = L.layerGroup().addTo(map);
+
+    const baseMaps = {
+      "Dark Basemap (OSM)": darkBasemapOSM,
+      "Satellite Imagery (Esri)": esriSatellite,
+      "Topographic (Esri)": esriTopographic,
+      "Terrain (OpenTopoMap)": openTopoMap
+    };
+
+    const overlayMaps = {
+      "Earthquake Epicenters": quakesLayerGroup,
+      "GEM Active Faults (Myanmar)": faultsLayerGroup
+    };
+
+    // Configure Layers Control to expand ONLY on click (not hover)
+    const layersControl = L.control.layers(baseMaps, overlayMaps, { collapsed: true }).addTo(map);
+    const layersContainer = layersControl.getContainer();
+    const layersToggle = layersContainer.querySelector(".leaflet-control-layers-toggle");
+
+    // Remove Leaflet's default hover-to-expand listeners
+    L.DomEvent.off(layersContainer, "mouseenter", layersControl.expand, layersControl);
+    L.DomEvent.off(layersContainer, "mouseleave", layersControl.collapse, layersControl);
+    L.DomEvent.off(layersToggle, "click", layersControl._expandSafely, layersControl);
+    L.DomEvent.off(layersToggle, "focus", layersControl.expand, layersControl);
+
+    // Toggle popup strictly on click
+    L.DomEvent.on(layersToggle, "click", (e) => {
+      L.DomEvent.stop(e);
+      if (layersContainer.classList.contains("leaflet-control-layers-expanded")) {
+        layersControl.collapse();
+      } else {
+        layersControl.expand();
+      }
+    });
+
+    // Collapse layers control when clicking on the map
+    map.on("click", () => {
+      layersControl.collapse();
+    });
+
+    L.control.scale({ imperial: true, metric: true }).addTo(map);
+
+    // 3. Render Earthquake Epicenters
+    const quakeMarkers = [];
+    earthquakeGeoJSON.features.forEach((feature) => {
+      const [lng, lat] = feature.geometry.coordinates;
+      const p = feature.properties;
+      const isLarger = p.magnitude >= 4.0;
+      const color = isLarger ? "#ef4444" : "#f59e0b";
+      const size = isLarger ? 18 : 14;
+
+      const icon = L.divIcon({
+        className: "epicenter-icon",
+        iconSize: [size * 2.5, size * 2.5],
+        html: `
+          <div class="epicenter-pulse" style="width:${size * 2.2}px;height:${size * 2.2}px;background:${color};"></div>
+          <div class="epicenter-core" style="width:${size}px;height:${size}px;background:${color};"></div>
+        `
+      });
+
+      const popupHtml = `
+        <div style="min-width: 230px;">
+          <div style="font-weight:700;font-size:0.95rem;color:${color};margin-bottom:4px;">
+            Earthquake Information (${p.magnitude_label})
+          </div>
+          <table class="popup-table">
+            <tr><td>Date</td><td>${p.date}</td></tr>
+            <tr><td>Time (MST)</td><td>${p.time_mst}</td></tr>
+            <tr><td>Magnitude</td><td>${p.magnitude_label}</td></tr>
+            <tr><td>Latitude</td><td>${p.latitude}</td></tr>
+            <tr><td>Longitude</td><td>${p.longitude}</td></tr>
+            <tr><td>Depth</td><td>${p.depth_km} km</td></tr>
+            <tr><td>Region</td><td>${p.region}</td></tr>
+          </table>
+          <div style="margin-top:6px;font-size:0.72rem;color:#9ca3af;">
+            Source: <a href="${p.url}" target="_blank" style="color:#60a5fa;">DMH Myanmar</a>
+          </div>
+        </div>
+      `;
+
+      const marker = L.marker([lat, lng], { icon }).bindPopup(popupHtml);
+      marker.addTo(quakesLayerGroup);
+      quakeMarkers.push(marker);
+    });
+
+    function focusQuake(idx) {
+      const m = quakeMarkers[idx];
+      if (m) {
+        map.flyTo(m.getLatLng(), 10, { duration: 0.8 });
+        m.openPopup();
+      }
+    }
+
+    function resetView() {
+      map.flyTo([21.95, 99.08], 9, { duration: 0.8 });
+    }
+
+    function zoomMyanmar() {
+      map.flyTo([20.5, 96.5], 6, { duration: 0.8 });
+    }
+
+    // 4. Fault Styling & Filtering for Myanmar Region
+    function getFaultColor(slipType) {
+      const s = (slipType || "").toLowerCase();
+      if (s.includes("dextral") || s.includes("sinistral") || s.includes("strike")) return "#ef4444";
+      if (s.includes("thrust") || s.includes("reverse") || s.includes("subduction")) return "#a855f7";
+      if (s.includes("normal")) return "#3b82f6";
+      return "#10b981";
+    }
+
+    const MYANMAR_BBOX = { minLon: 91.5, maxLon: 102.0, minLat: 9.0, maxLat: 29.0 };
+
+    function featureIntersectsMyanmar(feature) {
+      if (!feature || !feature.geometry) return false;
+      const props = feature.properties || {};
+      const cat = (props.catalog_name || "").toLowerCase();
+      if (cat.includes("myanmar") || cat.includes("burma")) return true;
+
+      const coords = feature.geometry.coordinates;
+      if (!coords) return false;
+
+      const checkCoord = (pt) =>
+        pt[0] >= MYANMAR_BBOX.minLon &&
+        pt[0] <= MYANMAR_BBOX.maxLon &&
+        pt[1] >= MYANMAR_BBOX.minLat &&
+        pt[1] <= MYANMAR_BBOX.maxLat;
+
+      if (feature.geometry.type === "LineString") {
+        return coords.some(checkCoord);
+      } else if (feature.geometry.type === "MultiLineString") {
+        return coords.some((line) => line.some(checkCoord));
+      }
+      return false;
+    }
+
+    let myanmarFaultsGeoJSON = null;
+
+    function renderFaults(geojsonData, filterForMyanmar = true) {
+      faultsLayerGroup.clearLayers();
+      const features = filterForMyanmar
+        ? geojsonData.features.filter(featureIntersectsMyanmar)
+        : geojsonData.features;
+
+      myanmarFaultsGeoJSON = {
+        type: "FeatureCollection",
+        name: "gem_myanmar_active_faults",
+        crs: { type: "name", properties: { name: "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+        features: features
+      };
+
+      L.geoJSON(myanmarFaultsGeoJSON, {
+        style: (feature) => ({
+          color: getFaultColor(feature.properties?.slip_type),
+          weight: 2.5,
+          opacity: 0.88
+        }),
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties || {};
+          layer.bindPopup(`
+            <div style="min-width:210px;">
+              <div style="font-weight:700;font-size:0.9rem;color:#60a5fa;margin-bottom:4px;">
+                ${p.name || "Unnamed Active Fault"}
+              </div>
+              <table class="popup-table">
+                <tr><td>Slip Type</td><td>${p.slip_type || "N/A"}</td></tr>
+                <tr><td>Slip Rate</td><td>${p.net_slip_rate || p.strike_slip_rate || "N/A"}</td></tr>
+                <tr><td>Dip / Dir</td><td>${p.average_dip || "N/A"}° / ${p.dip_dir || "N/A"}</td></tr>
+                <tr><td>Catalog</td><td>${p.catalog_name || "GEM GAF-DB"}</td></tr>
+                <tr><td>ID</td><td>${p.catalog_id || "N/A"}</td></tr>
+              </table>
+            </div>
+          `);
+        }
+      }).addTo(faultsLayerGroup);
+
+      document.getElementById("status").innerHTML =
+        `Loaded <strong>${features.length}</strong> active fault traces in the Myanmar tectonic region.`;
+      document.getElementById("downloadBtn").disabled = false;
+      document.getElementById("downloadCombinedBtn").disabled = false;
+    }
+
+    // 5. Fetch GEM Global Active Faults from Official GitHub Repository
+    const GEM_URLS = [
+      "https://raw.githubusercontent.com/GEMScienceTools/gem-global-active-faults/master/geojson/gem_active_faults_harmonized.geojson",
+      "https://raw.githubusercontent.com/GEMScienceTools/gem-global-active-faults/master/geojson/gem_active_faults.geojson"
+    ];
+
+    async function loadGEMFaults() {
+      for (const url of GEM_URLS) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const data = await res.json();
+          renderFaults(data, true);
+          return;
+        } catch (err) {
+          console.warn("Failed fetching from", url, err);
+        }
+      }
+      document.getElementById("status").innerHTML =
+        "Could not reach GitHub directly. Please load your local <code>.geojson</code> file below.";
+    }
+
+    loadGEMFaults();
+
+    // 6. Export Valid GeoJSON Files
+    function triggerDownload(obj, filename) {
+      const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/geo+json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadMyanmarGeoJSON() {
+      if (!myanmarFaultsGeoJSON) return;
+      triggerDownload(myanmarFaultsGeoJSON, "myanmar_active_faults.geojson");
+    }
+
+    function downloadCombinedGeoJSON() {
+      if (!myanmarFaultsGeoJSON) return;
+      const combined = {
+        type: "FeatureCollection",
+        features: [...earthquakeGeoJSON.features, ...myanmarFaultsGeoJSON.features]
+      };
+      triggerDownload(combined, "myanmar_quakes_and_faults_20261018.geojson");
+    }
+
+    // 7. Local File Input Handler
+    document.getElementById("fileInput").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const json = JSON.parse(evt.target.result);
+          renderFaults(json, true);
+        } catch (err) {
+          alert("Invalid GeoJSON file.");
+        }
+      };
+      reader.readAsText(file);
+    });
+  </script>
+</body>
+</html>
